@@ -1,3 +1,5 @@
+### .env example for redTeam
+
 CALDERA_URL=http://10.1.99.1:8888
 
 CALDERA_KEY=ADMIN123
