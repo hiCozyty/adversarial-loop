@@ -18,6 +18,7 @@ const ROUND_ID     = parseInt(process.argv.find(a => a.startsWith("--round="))?.
 const DRY_RUN      = process.argv.includes("--dry-run")
 
 function validateEnv() {
+    console.log(process.env.ADVERSARY_ID)
     const required = ["LLM_API_KEY", "CALDERA_URL", "CALDERA_KEY", "ADVERSARY_ID"]
     const missing  = required.filter(k => !process.env[k])
     if (missing.length) {

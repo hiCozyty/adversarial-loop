@@ -97,7 +97,7 @@ export async function closeOperation(opId) {
 
 // Queue a single ability against a specific agent in an operation
 export async function addLink(opId, { paw, abilityId, facts = [] }) {
-  const links = await req("POST", `/api/v2/operations/${opId}/links`, {
+  const links = await req("PUT", `/api/v2/operations/${opId}/links`, {  
     paw,
     ability: { ability_id: abilityId },
     facts,
