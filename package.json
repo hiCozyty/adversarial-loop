@@ -4,9 +4,9 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dry-run": "bun run index.js --dry-run",
-    "start": "bun run index.js",
-    "round": "bun run index.js --round=1"
+    "redDry": "bun run ./redTeam/index.js --dry-run",
+    "redStart": "bun run ./redTeam/index.js",
+    "redRound": "bun run ./redTeam/index.js --round=1"
   },
   "devDependencies": {
     "@types/bun": "latest"

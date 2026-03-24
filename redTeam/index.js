@@ -27,6 +27,7 @@ function validateEnv() {
 }
 
 async function main() {
+    return
   validateEnv()
   console.log(`\n[round ${ROUND_ID}] Starting red agent${DRY_RUN ? " (DRY RUN)" : ""}`)
 
