@@ -3,6 +3,11 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "dry-run": "bun run index.js --dry-run",
+    "start": "bun run index.js",
+    "round": "bun run index.js --round=1"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },
