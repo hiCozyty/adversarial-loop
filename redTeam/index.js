@@ -10,7 +10,7 @@ import {
 
 import { runOrchestrator } from "./src/orchestrator.js"
 import { generateReport, printReport } from "./src/report.js"
-import { writeFileSync, mkdirSync } from "fs"
+import { $ } from "bun"
 
 const ADVERSARY_ID = process.env.ADVERSARY_ID
 const TARGET_HOST  = process.env.TARGET_HOST
@@ -87,9 +87,9 @@ async function main() {
 
     printReport(report)
 
-    mkdirSync("./reports", { recursive: true })
+    await $`mkdir -p ./reports`
     const reportPath = `./reports/round-${ROUND_ID}-${Date.now()}.json`
-    writeFileSync(reportPath, JSON.stringify(report, null, 2))
+    Bun.write(reportPath, JSON.stringify(report, null, 2))
     console.log(`Report saved: ${reportPath}`)
 
     process.exit(runResult.outcome.success ? 0 : 1)
