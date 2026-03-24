@@ -8,7 +8,7 @@ curl -s -H "KEY:ADMIN123" http://10.1.99.1:8888/api/v2/adversaries | jq '.[] | s
 
 ADVERSARY_ID=populate with your custom adversary profile ID
 
-TARGET_HOST=debian #host name of the target vm machine
+TARGET_HOST=target
 
 LLM_API_KEY=
 LLM_BASE_URL=

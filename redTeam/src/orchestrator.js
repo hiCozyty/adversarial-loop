@@ -31,68 +31,73 @@ async function chatCompletion(messages, tools) {
 
 
 function buildTools(abilities) {
-  const abilityList = abilities.map(a => ({
-    id:          a.ability_id,
-    name:        a.name,
-    tactic:      a.tactic,
-    technique:   a.technique_id,
-    description: a.description,
-    executor:    a.executors?.find(e => e.platform === "linux")?.name || "sh",
-  }))
+    const abilityList = abilities.map(a => {
+        const executor = a.executors?.find(e => e.platform === "linux")
+        return {
+        id:          a.ability_id,
+        name:        a.name,
+        tactic:      a.tactic,
+        technique:   a.technique_id,
+        description: a.description || "",
+        command:     executor?.command || "",
+        }
+    })
 
-  return [
-    {
-      type: "function",
-      function: {
-        name: "run_ability",
-        description: `Execute one ATT&CK technique against the target agent.
-Available abilities:
-${abilityList.map(a => `  [${a.id}] ${a.name} | ${a.tactic} | ${a.technique} — ${a.description}`).join("\n")}`,
-        parameters: {
-          type: "object",
-          properties: {
-            ability_id: {
-              type:        "string",
-              description: "The UUID of the ability to execute",
+    return [
+        {
+        type: "function",
+        function: {
+            name: "run_ability",
+            description: `Execute one ATT&CK technique against the target agent.
+    Available abilities:
+    ${abilityList.map(a =>
+    `  [${a.id}] ${a.name} | ${a.tactic} | ${a.technique}
+    desc: ${a.description}
+    cmd:  ${a.command}`
+    ).join("\n")}`,
+            parameters: {
+            type: "object",
+            properties: {
+                ability_id: {
+                type:        "string",
+                description: "The UUID of the ability to execute",
+                },
+                reason: {
+                type:        "string",
+                description: "Why you chose this technique given your current knowledge",
+                },
             },
-            reason: {
-              type:        "string",
-              description: "Why you chose this technique given your current knowledge",
+            required: ["ability_id", "reason"],
             },
-          },
-          required: ["ability_id", "reason"],
         },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "declare_complete",
-        description: "Call this when the goal is achieved (sensitive file contents found) OR when all viable paths are exhausted.",
-        parameters: {
-          type: "object",
-          properties: {
-            success: {
-              type:        "boolean",
-              description: "true if you found the sensitive file contents, false if exhausted",
-            },
-            winning_path: {
-              type:        "string",
-              description: "If success=true, describe the technique chain that worked",
-            },
-            reason: {
-              type:        "string",
-              description: "Explanation of outcome",
-            },
-          },
-          required: ["success", "reason"],
         },
-      },
-    },
-  ]
+        {
+        type: "function",
+        function: {
+            name: "declare_complete",
+            description: "Call this when the goal is achieved (sensitive file contents found) OR when all viable paths are exhausted.",
+            parameters: {
+            type: "object",
+            properties: {
+                success: {
+                type:        "boolean",
+                description: "true if you found the sensitive file contents, false if exhausted",
+                },
+                winning_path: {
+                type:        "string",
+                description: "If success=true, describe the technique chain that worked",
+                },
+                reason: {
+                type:        "string",
+                description: "Explanation of outcome",
+                },
+            },
+            required: ["success", "reason"],
+            },
+        },
+        },
+    ]
 }
-
-// ── System prompt ─────────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `You are an autonomous red team operator on a Linux target machine.
 Your ONLY goal is to read the contents of a sensitive file somewhere on the system. You do not know its location or name.
