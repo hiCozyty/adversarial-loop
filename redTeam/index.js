@@ -44,10 +44,12 @@ async function main() {
 
     if (DRY_RUN) {
         console.log("\n[dry-run] Abilities loaded — not running operation\n")
-        console.log("ability_id                            | technique   | name")
-        console.log("-".repeat(80))
+        console.log("ability_id | technique | name | command")
+        console.log("-".repeat(120))
         for (const a of abilities) {
-        console.log(`${a.ability_id} | ${(a.technique_id || "").padEnd(11)} | ${a.name}`)
+            const executor = a.executors?.find(e => e.platform === "linux")
+            const cmd = (executor?.command || "").slice(0, 60).replace(/\n/g, " ")
+            console.log(`${a.ability_id} | ${(a.technique_id || "").padEnd(11)} | ${a.name.padEnd(40)} | ${cmd}`)
         }
         process.exit(0)
     }
