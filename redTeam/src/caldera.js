@@ -96,16 +96,23 @@ export async function closeOperation(opId) {
 // ── Links (individual ability executions) ─────────────────────────────────────
 
 // Queue a single ability against a specific agent in an operation
-export async function addLink(opId, { paw, abilityId, facts = [] }) {
-  const links = await req("PUT", `/api/v2/operations/${opId}/links`, {  
+export async function addLink(opId, { paw, abilityId, ability, facts = [] }) {
+  const executor = ability?.executors?.find(e => e.platform === "linux")
+  if (!executor) throw new Error(`No linux executor for ability ${abilityId}`)
+
+  const link = await req("POST", `/api/v2/operations/${opId}/potential-links`, {
     paw,
-    ability: { ability_id: abilityId },
+    ability:  { ability_id: abilityId },
+    executor: {
+      name:     executor.name,
+      platform: executor.platform,
+      command:  executor.command,
+    },
     facts,
   })
-  // Returns array of created links
-  return links[0]
+  // potential-links returns a single link object, not an array
+  return link
 }
-
 export async function getLink(opId, linkId) {
   return req("GET", `/api/v2/operations/${opId}/links/${linkId}`)
 }
