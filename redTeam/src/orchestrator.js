@@ -187,7 +187,7 @@ export async function runOrchestrator({ opId, agentPaw, abilities, maxSteps = 25
       let result
       try {
         const link = await addLink(opId, { paw: agentPaw, abilityId: ability_id, ability, facts: [] })
-        const done = await waitForLink(opId, link.id, { timeoutMs: 45000 })
+        const done = await waitForLink(opId, link.id, { timeoutMs: 100000 })
         result     = parseLinkResult(done)
       } catch (err) {
         result = {
