@@ -1,7 +1,6 @@
 // orchestrator.js — LLM-driven goal-directed red agent
 
-import { addLink, waitForLink, parseLinkResult } from "./caldera.js"
-
+import { addLink, waitForLink, parseLinkResult, getLinkResult } from "./caldera.js"
 const LLM_URL   = process.env.LLM_BASE_URL
 const LLM_KEY   = process.env.LLM_API_KEY
 const LLM_MODEL = process.env.LLM_MODEL
@@ -187,8 +186,9 @@ export async function runOrchestrator({ opId, agentPaw, abilities, maxSteps = 25
       let result
       try {
         const link = await addLink(opId, { paw: agentPaw, abilityId: ability_id, ability, facts: [] })
-        const done = await waitForLink(opId, link.id, { timeoutMs: 100000 })
-        result     = parseLinkResult(done)
+        await waitForLink(opId, link.id, { timeoutMs: 10000 })
+        const resultResp = await getLinkResult(opId, link.id)
+        result = parseLinkResult(resultResp)
       } catch (err) {
         result = {
           ability_id,

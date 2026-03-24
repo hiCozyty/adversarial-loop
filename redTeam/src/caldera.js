@@ -68,6 +68,25 @@ export async function getAdversaryAbilities(adversaryId) {
 
   return abilities
 }
+export async function getLinkResult(opId, linkId) {
+  return req("GET", `/api/v2/operations/${opId}/links/${linkId}/result`)
+}
+
+export function parseLinkResult(resultResponse) {
+  const link   = resultResponse.link
+  const output = JSON.parse(Buffer.from(resultResponse.result, "base64").toString("utf-8"))
+  return {
+    linkId:    link.id,
+    ability:   link.ability?.name || "unknown",
+    abilityId: link.ability?.ability_id,
+    technique: link.ability?.technique_id,
+    command:   link.plaintext_command || "",
+    status:    link.status === 0 ? "success" : "failed",
+    exitCode:  parseInt(output.exit_code ?? link.status),
+    stdout:    output.stdout || "",
+    stderr:    output.stderr || "",
+  }
+}
 
 // ── Operations ────────────────────────────────────────────────────────────────
 
