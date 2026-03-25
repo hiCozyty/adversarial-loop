@@ -109,7 +109,12 @@ export async function getOperation(opId) {
 }
 
 export async function closeOperation(opId) {
-  return req("PATCH", `/api/v2/operations/${opId}`, { state: "finished" })
+	return req("PATCH", `/api/v2/operations/${opId}`, { state: "finished" })
+}
+
+// Get operation report with full agent output (stdout/stderr for each step)
+export async function getOperationReport(opId) {
+	return req("POST", `/api/v2/operations/${opId}/report`, { enable_agent_output: true })
 }
 
 // ── Links (individual ability executions) ─────────────────────────────────────
@@ -133,7 +138,12 @@ export async function addLink(opId, { paw, abilityId, ability, facts = [] }) {
   return link
 }
 export async function getLink(opId, linkId) {
-  return req("GET", `/api/v2/operations/${opId}/links/${linkId}`)
+	return req("GET", `/api/v2/operations/${opId}/links/${linkId}`)
+}
+
+// Get operation report with agent output (stdout/stderr)
+export async function getOperationReport(opId) {
+	return req("POST", `/api/v2/operations/${opId}/report`, { enable_agent_output: true })
 }
 
 // Poll until the link reaches a terminal status (collect, fail, discard)
@@ -162,16 +172,27 @@ export function decodeCommand(b64) {
 
 // Extract readable output from a finished link
 export function parseLinkResult(link) {
-  const output = link.output ? JSON.parse(link.output) : {}
-  return {
-    linkId:   link.id,
-    ability:  link.ability?.name || "unknown",
-    abilityId: link.ability?.ability_id,
-    technique: link.ability?.technique_id,
-    command:  decodeCommand(link.command || ""),
-    status:   link.finish_reason || (link.status === 0 ? "success" : "failed"),
-    exitCode: link.status,
-    stdout:   output.stdout || "",
-    stderr:   output.stderr || "",
-  }
+	let output = {}
+	if (link.output) {
+		// Handle Python-style booleans (True/False) in JSON
+		const fixedJson = link.output.replace(/True/g, "true").replace(/False/g, "false")
+		try {
+			output = JSON.parse(fixedJson)
+		} catch (e) {
+			console.error(`Failed to parse output: ${link.output.slice(0, 100)}`)
+			output = { stdout: link.output, stderr: "" }
+		}
+	}
+	return {
+		linkId: link.id,
+		ability: link.ability?.name || "unknown",
+		abilityId: link.ability?.ability_id,
+		technique: link.ability?.technique_id,
+		command: decodeCommand(link.command || ""),
+		status: link.finish_reason || (link.status === 0 ? "success" : "failed"),
+		exitCode: link.status,
+		stdout: output.stdout || "",
+		stderr: output.stderr || "",
+		facts: link.facts || [],
+	}
 }

@@ -1,6 +1,6 @@
 // orchestrator.js — LLM-driven goal-directed red agent
 
-import { addLink, waitForLink, parseLinkResult, getLinkResult } from "./caldera.js"
+import { addLink, waitForLink, parseLinkResult, getLink, getOperationReport } from "./caldera.js"
 const LLM_URL   = process.env.LLM_BASE_URL
 const LLM_KEY   = process.env.LLM_API_KEY
 const LLM_MODEL = process.env.LLM_MODEL
@@ -185,17 +185,43 @@ export async function runOrchestrator({ opId, agentPaw, abilities, maxSteps = 25
 
       let result
       try {
+        console.log(`  → Adding link for ability ${ability_id}...`)
         const link = await addLink(opId, { paw: agentPaw, abilityId: ability_id, ability, facts: [] })
-        await waitForLink(opId, link.id, { timeoutMs: 10000 })
-        const resultResp = await getLinkResult(opId, link.id)
-        result = parseLinkResult(resultResp)
+        console.log(`  → Link created: ${link.id}, waiting for execution...`)
+        await waitForLink(opId, link.id, { timeoutMs: 30000 })
+        console.log(`  → Link finished, fetching result...`)
+
+        // Fetch operation report with agent output to get stdout/stderr
+		const report = await getOperationReport(opId)
+		// Report steps is keyed by agent paw, e.g., { iwkbfg: { steps: [...] } }
+		const agentSteps = report.steps?.[agentPaw]?.steps || []
+		console.log(` → Report steps for agent:`, agentSteps.length)
+		// Find the step by link_id (not linkId)
+		const stepResult = agentSteps.find(s => s.link_id === link.id)
+		console.log(` → Step output:`, JSON.stringify(stepResult?.output || {}).slice(0, 200))
+        result = {
+			linkId: link.id,
+			ability: ability?.name || "unknown",
+			abilityId: ability_id,
+			technique: ability?.technique_id,
+			command: link.plaintext_command || "",
+			status: link.status === 0 ? "success" : "failed",
+			exitCode: link.status,
+			stdout: stepResult?.output?.stdout || "",
+			stderr: stepResult?.output?.stderr || "",
+			facts: link.facts || [],
+		}
+		console.log(` → stdout: ${result.stdout.slice(0, 200)}`)
       } catch (err) {
+        console.error(`  → ERROR: ${err.message}`)
         result = {
           ability_id,
           ability:  ability?.name,
-          status:   "error",
-          stdout:   "",
-          stderr:   err.message,
+          abilityId: ability_id,
+          technique: ability?.technique_id,
+          status: "error",
+          stdout: "",
+          stderr: err.message,
           exitCode: -1,
         }
       }
@@ -227,8 +253,9 @@ export async function runOrchestrator({ opId, agentPaw, abilities, maxSteps = 25
         content:      JSON.stringify({
           ability:  result.ability,
           exitCode: result.exitCode,
-          stdout:   result.stdout.slice(0, 2000),  // truncate to keep context sane
+          stdout:   result.stdout, //.slice(0, 2000),  // truncate to keep context sane
           stderr:   result.stderr.slice(0, 500),
+          facts: result.facts || [],
         }),
       })
     }
