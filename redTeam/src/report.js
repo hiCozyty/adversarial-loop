@@ -1,11 +1,17 @@
-// report.js — formats the run output into a structured report
+// report.js
 
 export function generateReport({ roundId, outcome, results, steps, agentPaw, startTime }) {
   const endTime     = new Date()
   const durationSec = ((endTime - startTime) / 1000).toFixed(1)
+  const WIN_STRING = "secrettext"  // ← define or import
 
-  const successfulSteps = results.filter(r => r.exitCode === 0)
-  const failedSteps     = results.filter(r => r.exitCode !== 0)
+  //count steps that either succeeded OR produced the win string
+  const effectiveSteps = results.filter(r => 
+    r.exitCode === 0 || (r.stdout + r.stderr).includes(WIN_STRING)
+  )
+  const failedSteps = results.filter(r => 
+    r.exitCode !== 0 && !(r.stdout + r.stderr).includes(WIN_STRING)
+  )
 
   // group by MITRE technique
   const byTechnique = {}
@@ -31,8 +37,8 @@ export function generateReport({ roundId, outcome, results, steps, agentPaw, sta
     },
     summary: {
       abilitiesAttempted: results.length,
-      succeeded:          successfulSteps.length,
-      failed:             failedSteps.length,
+      succeeded:          effectiveSteps.length,  // ← UPDATED
+      failed:             failedSteps.length,     // ← UPDATED
     },
     steps: results.map(r => ({
       step:      r.step,
@@ -42,42 +48,19 @@ export function generateReport({ roundId, outcome, results, steps, agentPaw, sta
       reason:    r.reason,
       exitCode:  r.exitCode,
       status:    r.status,
-      // truncate stdout for the report — full logs stay in Caldera
       stdoutSnippet: r.stdout?.slice(0, 500) || "",
       stderrSnippet: r.stderr?.slice(0, 200) || "",
-      winConditionHit: (r.stdout + r.stderr).includes("secrettext"),
+      winConditionHit: (r.stdout + r.stderr).includes(WIN_STRING),
     })),
     techniquesCoverage: Object.entries(byTechnique).map(([technique, steps]) => ({
       technique,
       attempts:  steps.length,
-      successes: steps.filter(s => s.exitCode === 0).length,
+      //count successes as exitCode 0 OR win string present
+      successes: steps.filter(s => 
+        s.exitCode === 0 || (s.stdout + s.stderr).includes(WIN_STRING)
+      ).length,
     })),
   }
 
   return report
-}
-
-export function printReport(report) {
-  console.log("\n" + "=".repeat(60))
-  console.log(`ROUND ${report.meta.roundId} — ${report.outcome.success ? "RED WIN ✓" : "EXHAUSTED ✗"}`)
-  console.log("=".repeat(60))
-  console.log(`Duration:   ${report.meta.durationSec}s over ${report.meta.totalSteps} steps`)
-  console.log(`Outcome:    ${report.outcome.reason}`)
-  if (report.outcome.winning_path) {
-    console.log(`Win path:   ${report.outcome.winning_path}`)
-  }
-  console.log(`\nSteps attempted: ${report.summary.abilitiesAttempted}`)
-  console.log(`  Succeeded: ${report.summary.succeeded}`)
-  console.log(`  Failed:    ${report.summary.failed}`)
-  console.log("\nStep-by-step:")
-  for (const s of report.steps) {
-    const icon = s.winConditionHit ? "🏆" : s.exitCode === 0 ? "✓" : "✗"
-    console.log(`  [${s.step}] ${icon} ${s.ability} (${s.technique}) — exit ${s.exitCode}`)
-    if (s.stdoutSnippet) console.log(`      → ${s.stdoutSnippet.slice(0, 100)}`)
-  }
-  console.log("\nTechnique coverage:")
-  for (const t of report.techniquesCoverage) {
-    console.log(`  ${t.technique}: ${t.successes}/${t.attempts} succeeded`)
-  }
-  console.log("=".repeat(60) + "\n")
 }

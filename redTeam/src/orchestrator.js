@@ -211,7 +211,7 @@ export async function runOrchestrator({ opId, agentPaw, abilities, maxSteps = 25
 			stderr: stepResult?.output?.stderr || "",
 			facts: link.facts || [],
 		}
-		console.log(` → stdout: ${result.stdout.slice(0, 200)}`)
+		console.log(` → stdout: ${result.stdout}`)
       } catch (err) {
         console.error(`  → ERROR: ${err.message}`)
         result = {
