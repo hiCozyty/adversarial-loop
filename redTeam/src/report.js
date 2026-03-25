@@ -16,7 +16,9 @@ export function printReport(report) {
   for (const s of report.steps) {
     // ✅ Icon logic already correct — 🏆 for winConditionHit
     const icon = s.winConditionHit ? "🏆" : s.exitCode === 0 ? "✓" : "✗"
-    const statusLabel = s.winConditionHit ? "[WIN]" : s.exitCode === 0 ? "[OK]" : `[EXIT ${s.exitCode}]`
+    const statusLabel = s.winConditionHit ? "[WIN]" : 
+                    s.exitCode === 0 ? "[OK]" : 
+                    s.stdout?.length > 100 ? "[PARTIAL]" : `[EXIT ${s.exitCode}]`
     console.log(`  [${s.step}] ${icon} ${s.ability} (${s.technique}) — ${statusLabel}`)
     if (s.stdoutSnippet) console.log(`      → ${s.stdoutSnippet.slice(0, 100)}`)
   }

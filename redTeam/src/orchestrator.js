@@ -18,7 +18,7 @@ async function chatCompletion(messages, tools) {
     },
     body: JSON.stringify({
       model:       LLM_MODEL,
-      temperature: 0.2,
+      temperature: 0,
       messages,
       tools,
       tool_choice: "required",
@@ -99,19 +99,20 @@ function buildTools(abilities) {
 }
 
 const SYSTEM_PROMPT = `You are an autonomous red team operator on a Linux target machine.
-Your ONLY goal is to read the contents of a sensitive file somewhere on the system. You do not know its location or name.
+Your ONLY goal is to read the contents of a sensitive file. You do not know its location or name.
 
-Rules:
-- You have a sandcat agent running as user "debian" (low-privilege, uid=1000)
-- The target is a Debian Linux system
-- Try techniques systematically — start with discovery, then privilege escalation paths
-- After each technique, analyse the stdout carefully for: file paths, credentials, privilege changes, or the sensitive data itself
-- If stdout contains the literal string "${WIN_STRING}" you have achieved the goal — call declare_complete immediately
-- Try every viable path before giving up — do not stop after the first failure
-- Do NOT repeat a technique you have already run unless the output gave you new facts that change the approach
-- Techniques that require a compiled payload (LD_PRELOAD) can be skipped if you cannot compile in-place
+WIN CONDITION (NON-NEGOTIABLE):
+- You succeed ONLY if you see the literal string "${WIN_STRING}" in command output.
+- Finding credentials, configs, or user lists is USEFUL INTEL but NOT success.
 
-Think like an adversary: chain techniques. Discovery → escalation → collection.`
+CRITICAL RULES:
+- DO NOT call declare_complete unless you have seen "${WIN_STRING}" in output OR you have explicitly tried ALL viable escalation paths.
+- If you identify a promising technique (like SUID exploitation, sudo abuse, credential use), RUN IT — do not just mention it.
+- Discovery → Escalation → Collection. Do not stop after discovery.
+- If stdout contains "${WIN_STRING}", call declare_complete immediately.
+- Do NOT repeat a technique you have already run this round.
+
+Think like an adversary: Chain techniques. Never declare exhausted after only discovery.`
 
 // ── Main orchestrator loop ────────────────────────────────────────────────────
 
@@ -151,16 +152,52 @@ export async function runOrchestrator({ opId, agentPaw, abilities, maxSteps = 25
     const args   = JSON.parse(toolCall.function.arguments)
 
     if (fnName === "declare_complete") {
-      outcome = args
-      console.log(`\n[done] ${args.success ? "WIN" : "EXHAUSTED"} — ${args.reason}`)
-
-      // Append tool result to history (required by OpenAI spec)
-      messages.push({
-        role:         "tool",
-        tool_call_id: toolCall.id,
-        content:      JSON.stringify({ acknowledged: true }),
-      })
-      break
+         if (args.success === false) {
+          // ✅ GENERALIZED PRINCIPLES (no hardcoded techniques):
+          // 1. Require minimum exploration effort before allowing exhaustion
+          const MIN_STEPS_BEFORE_EXHAUSTION = parseInt(process.env.MIN_STEPS_BEFORE_EXHAUSTION) || 8
+          
+          // 2. Require that the agent actually attempted *something* beyond initial discovery
+          //    (we infer this by checking if any result had non-empty stdout with actionable content)
+          const hasActionableOutput = results.some(r => 
+            r.stdout?.length > 50 || r.facts?.length > 0
+          )
+          
+          if (results.length < MIN_STEPS_BEFORE_EXHAUSTION || !hasActionableOutput) {
+            console.warn(`[warn] Exhaustion declared early: ${results.length} steps, actionable output: ${hasActionableOutput}`)
+            messages.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({
+                error: `Continue exploring. Minimum ${MIN_STEPS_BEFORE_EXHAUSTION} steps recommended before declaring exhaustion.`,
+              }),
+            })
+            continue
+          }
+        }
+        if (args.success === true) {
+          const allOutput = results.map(r => r.stdout + r.stderr).join(" ")
+          if (!allOutput.includes(WIN_STRING)) {
+            console.warn(`[warn] Success declared but win string "${WIN_STRING}" not found in output`)
+            messages.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({
+                error: `Win condition not met. Output must contain "${WIN_STRING}". Continue.`,
+              }),
+            })
+            continue
+          }
+        }
+        
+        outcome = args
+        console.log(`\n[done] ${args.success ? "WIN" : "EXHAUSTED"} — ${args.reason}`)
+        messages.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: JSON.stringify({ acknowledged: true }),
+        })
+        break
     }
 
     if (fnName === "run_ability") {
@@ -178,7 +215,6 @@ export async function runOrchestrator({ opId, agentPaw, abilities, maxSteps = 25
         continue
       }
 
-      usedIds.add(ability_id)
       const ability = abilities.find(a => a.ability_id === ability_id)
       console.log(`[step ${step}] Running: ${ability?.name || ability_id}`)
       console.log(`  Reason: ${reason}`)
@@ -187,6 +223,9 @@ export async function runOrchestrator({ opId, agentPaw, abilities, maxSteps = 25
       try {
         console.log(`  → Adding link for ability ${ability_id}...`)
         const link = await addLink(opId, { paw: agentPaw, abilityId: ability_id, ability, facts: [] })
+
+        usedIds.add(ability_id)
+
         console.log(`  → Link created: ${link.id}, waiting for execution...`)
         await waitForLink(opId, link.id, { timeoutMs: 30000 })
         console.log(`  → Link finished, fetching result...`)
@@ -214,6 +253,21 @@ export async function runOrchestrator({ opId, agentPaw, abilities, maxSteps = 25
 		console.log(` → stdout: ${result.stdout}`)
       } catch (err) {
         console.error(`  → ERROR: ${err.message}`)
+          // ✅ GENERALIZED: Classify error by type, not by ability
+          let errorType = "unknown"
+          let guidance = "Try a different approach."
+          
+          if (err.message.includes("missing specified executor")) {
+            errorType = "executor_unavailable"
+            guidance = "This ability's execution method isn't available on this agent. Try a technique with a different executor."
+          } else if (err.message.includes("timeout")) {
+            errorType = "timeout"
+            guidance = "The command took too long. Try a simpler or faster technique."
+          } else if (err.message.includes("permission") || err.message.includes("denied")) {
+            errorType = "permission_denied"
+            guidance = "Access was denied. Consider privilege escalation or a different target."
+          }
+  
         result = {
           ability_id,
           ability:  ability?.name,
@@ -246,16 +300,17 @@ export async function runOrchestrator({ opId, agentPaw, abilities, maxSteps = 25
         break
       }
 
-      // Feed result back so LLM can reason about next step
       messages.push({
-        role:         "tool",
+        role: "tool",
         tool_call_id: toolCall.id,
-        content:      JSON.stringify({
-          ability:  result.ability,
+        content: JSON.stringify({
+          ability: result.ability,
           exitCode: result.exitCode,
-          stdout:   result.stdout, //.slice(0, 2000),  // truncate to keep context sane
-          stderr:   result.stderr.slice(0, 500),
+          stdout: result.stdout?.slice(0, 2000),
+          stderr: result.stderr?.slice(0, 500),
           facts: result.facts || [],
+          status: result.status,
+          errorType: result.errorType,  //helps LLM adapt without hardcoded logic
         }),
       })
     }
