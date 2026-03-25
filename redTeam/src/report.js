@@ -1,5 +1,31 @@
 // report.js
-
+export function printReport(report) {
+  console.log("\n" + "=".repeat(60))
+  console.log(`ROUND ${report.meta.roundId} — ${report.outcome.success ? "RED WIN ✓" : "EXHAUSTED ✗"}`)
+  console.log("=".repeat(60))
+  console.log(`Duration:   ${report.meta.durationSec}s over ${report.meta.totalSteps} steps`)
+  console.log(`Outcome:    ${report.outcome.reason}`)
+  if (report.outcome.winning_path) {
+    console.log(`Win path:   ${report.outcome.winning_path}`)
+  }
+  console.log(`\nSteps attempted: ${report.summary.abilitiesAttempted}`)
+  // ✅ Clearer labels
+  console.log(`  Effective: ${report.summary.succeeded}`)   // was "Succeeded"
+  console.log(`  Failed:    ${report.summary.failed}`)
+  console.log("\nStep-by-step:")
+  for (const s of report.steps) {
+    // ✅ Icon logic already correct — 🏆 for winConditionHit
+    const icon = s.winConditionHit ? "🏆" : s.exitCode === 0 ? "✓" : "✗"
+    const statusLabel = s.winConditionHit ? "[WIN]" : s.exitCode === 0 ? "[OK]" : `[EXIT ${s.exitCode}]`
+    console.log(`  [${s.step}] ${icon} ${s.ability} (${s.technique}) — ${statusLabel}`)
+    if (s.stdoutSnippet) console.log(`      → ${s.stdoutSnippet.slice(0, 100)}`)
+  }
+  console.log("\nTechnique coverage:")
+  for (const t of report.techniquesCoverage) {
+    console.log(`  ${t.technique}: ${t.successes}/${t.attempts} effective`)
+  }
+  console.log("=".repeat(60) + "\n")
+}
 export function generateReport({ roundId, outcome, results, steps, agentPaw, startTime }) {
   const endTime     = new Date()
   const durationSec = ((endTime - startTime) / 1000).toFixed(1)
